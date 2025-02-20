@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module external.linked.project.id="PlcProject" external.linked.project.path="$MODULE_DIR$/../../PlcProject" external.root.project.path="$MODULE_DIR$/../../PlcProject" external.system.id="GRADLE" external.system.module.group="plc.project" external.system.module.version="1.0.0" type="JAVA_MODULE" version="4">
+  <component name="NewModuleRootManager" inherit-compiler-output="true">
+    <exclude-output />
+    <content url="file://$MODULE_DIR$/../../PlcProject">
+      <excludeFolder url="file://$MODULE_DIR$/../../PlcProject/.gradle" />
+      <excludeFolder url="file://$MODULE_DIR$/../../PlcProject/build" />
+      <excludeFolder url="file://$MODULE_DIR$/../../PlcProject/out" />
+    </content>
+    <orderEntry type="inheritedJdk" />
+    <orderEntry type="sourceFolder" forTests="false" />
+  </component>
+</module>

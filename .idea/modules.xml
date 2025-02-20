@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/PlcProject.iml" filepath="$PROJECT_DIR$/.idea/modules/PlcProject.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/PlcProject.main.iml" filepath="$PROJECT_DIR$/.idea/modules/PlcProject.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/PlcProject.test.iml" filepath="$PROJECT_DIR$/.idea/modules/PlcProject.test.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/Project Checkpoint 1.iml" filepath="$PROJECT_DIR$/.idea/Project Checkpoint 1.iml" />
+    </modules>
+  </component>
+</project>

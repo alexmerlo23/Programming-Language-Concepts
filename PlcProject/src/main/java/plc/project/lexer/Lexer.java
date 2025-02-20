@@ -212,6 +212,7 @@ public final class Lexer {
      * A helper class for maintaining the state of the character stream (input)
      * and methods for building up token literals.
      */
+
     private static final class CharStream {
 
         private final String input;

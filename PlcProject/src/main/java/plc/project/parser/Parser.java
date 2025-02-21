@@ -4,6 +4,8 @@ import plc.project.lexer.Token;
 import java.util.ArrayList;
 import java.util.List;
 import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.Optional;
 
 import static com.google.common.base.Preconditions.checkState;
 
@@ -36,50 +38,145 @@ public final class Parser {
     }
 
     public Ast.Stmt parseStmt() throws ParseException {
-        /*if (tokens.peek("let")) {
+        if (tokens.peek("LET")) {
             return parseLetStmt();
-        } else if (tokens.peek("def")) {
+        } else if (tokens.peek("DEF")) {
             return parseDefStmt();
-        } else if (tokens.peek("if")) {
+        } else if (tokens.peek("IF")) {
             return parseIfStmt();
-        } else if (tokens.peek("for")) {
+        } else if (tokens.peek("FOR")) {
             return parseForStmt();
-        } else if (tokens.peek("return")) {
+        } else if (tokens.peek("RETURN")) {
             return parseReturnStmt();
-        } else {*/
+        } else {
             return parseExpressionOrAssignmentStmt();
-        //}
+        }
     }
 
     private Ast.Stmt.Let parseLetStmt() throws ParseException {
-        throw new UnsupportedOperationException("TODO"); //TODO
+        tokens.match("LET");
+        String variable = tokens.get(0).literal(); // Access the identifier
+        tokens.match(Token.Type.IDENTIFIER);
+        Optional<Ast.Expr> expression = Optional.empty(); // Default value for expression is empty
+
+        if (tokens.match("=")) {
+            expression = Optional.of(parseExpr()); // Only parse the expression if "=" is present
+        }
+
+        // Check if the semicolon is present, if not, throw a ParseException
+        if (!tokens.match(";")) {
+            throw new ParseException("Expected semicolon after LET statement.");
+        }
+
+        return new Ast.Stmt.Let(variable, expression); // Return the Let statement with the optional expression
     }
 
+
+
     private Ast.Stmt.Def parseDefStmt() throws ParseException {
-        throw new UnsupportedOperationException("TODO"); //TODO
+        tokens.match("def");
+        String functionName = tokens.get(0).literal();
+        tokens.match(Token.Type.IDENTIFIER);
+        tokens.match("(");
+        List<String> parameters = new ArrayList<>();
+        if (!tokens.peek(")")) {
+            do {
+                parameters.add(tokens.get(0).literal());
+                tokens.match(Token.Type.IDENTIFIER);
+            } while (tokens.match(","));
+        }
+        tokens.match(")");
+        tokens.match("{");
+        List<Ast.Stmt> body = new ArrayList<>();
+        while (!tokens.peek("}")) {
+            body.add(parseStmt());
+        }
+        tokens.match("}");
+        return new Ast.Stmt.Def(functionName, parameters, body);
     }
 
     private Ast.Stmt.If parseIfStmt() throws ParseException {
-        throw new UnsupportedOperationException("TODO"); //TODO
+        tokens.match("if");
+        Ast.Expr condition = parseExpr();
+        tokens.match("{");
+        List<Ast.Stmt> thenBody = new ArrayList<>();
+        while (!tokens.peek("}")) {
+            thenBody.add(parseStmt());
+        }
+        tokens.match("}");
+        List<Ast.Stmt> elseBody = new ArrayList<>();
+        if (tokens.peek("else")) {
+            tokens.match("else");
+            tokens.match("{");
+            while (!tokens.peek("}")) {
+                elseBody.add(parseStmt());
+            }
+            tokens.match("}");
+        }
+        return new Ast.Stmt.If(condition, thenBody, elseBody);
     }
 
     private Ast.Stmt.For parseForStmt() throws ParseException {
-        throw new UnsupportedOperationException("TODO"); //TODO
+        tokens.match("FOR"); // Match "FOR"
+
+        String variable = tokens.get(0).literal(); // Access the variable name
+        tokens.match(Token.Type.IDENTIFIER); // Match the identifier
+
+        // Check for the "IN" keyword, and if missing, throw a ParseException
+        if (!tokens.match("IN")) {
+            throw new ParseException("Expected 'IN' after the variable in FOR loop.");
+        }
+
+        Ast.Expr range = parseExpr(); // Parse the range expression
+
+        tokens.match("DO"); // Match "DO" before the body of the loop
+
+        List<Ast.Stmt> body = new ArrayList<>();
+        while (!tokens.peek("END")) {
+            body.add(parseStmt()); // Parse statements inside the loop body
+        }
+
+        tokens.match("END"); // Match the "END" keyword for the loop
+
+        return new Ast.Stmt.For(variable, range, body); // Return the parsed FOR statement
     }
+
+
+
+
 
     private Ast.Stmt.Return parseReturnStmt() throws ParseException {
-        throw new UnsupportedOperationException("TODO"); //TODO
+        tokens.match("RETURN"); // Match the "RETURN" keyword
+
+        Optional<Ast.Expr> expression = Optional.empty(); // Default value if no expression is provided
+
+        // Check if there's an expression (if the next token is not a semicolon)
+        if (!tokens.peek(";")) {
+            expression = Optional.of(parseExpr()); // Parse the expression if available
+        }
+
+        // Ensure there is a semicolon at the end
+        tokens.match(";");
+
+        return new Ast.Stmt.Return(expression); // Return the return statement with the optional expression
     }
 
+
     private Ast.Stmt parseExpressionOrAssignmentStmt() throws ParseException {
-        Ast.Expr expression = parseExpr();
-       /* if (tokens.peek("=")) {
-            tokens.match("=");
-            Ast.Expr value = parseExpr();
-            return new Ast.Stmt.Assignment(expression, value);
-        }*/
-        return new Ast.Stmt.Expression(expression);
+        Ast.Expr expression = parseExpr();  // Parse the expression
+        if (tokens.peek("=")) {  // Check if the next token is an assignment operator
+            tokens.match("=");  // Match the assignment token
+            Ast.Expr value = parseExpr();  // Parse the value being assigned
+            return new Ast.Stmt.Assignment(expression, value);  // Return the assignment statement
+        }
+        // Ensure a semicolon follows the expression
+        if (!tokens.peek(";")) {  // Use peek instead of match here to check the next token
+            throw new ParseException("Expected semicolon after expression.");
+        }
+        tokens.match(";");  // If a semicolon is present, match it
+        return new Ast.Stmt.Expression(expression);  // Return the expression statement
     }
+
 
     public Ast.Expr parseExpr() throws ParseException {
         return parseLogicalExpr();
@@ -136,7 +233,21 @@ public final class Parser {
     private Ast.Expr parsePrimaryExpr() throws ParseException {
         if (tokens.peek(Token.Type.INTEGER)) {
             return parseLiteralExpr();
+        } else if (tokens.peek(Token.Type.DECIMAL)) {
+            return parseLiteralExpr();  // Handle DECIMAL literals
+        } else if (tokens.peek(Token.Type.STRING)) {
+            return parseLiteralExpr();  // Handle STRING literals
+        } else if (tokens.peek(Token.Type.CHARACTER)) {
+            return parseLiteralExpr();  // Handle CHARACTER literals
         } else if (tokens.peek(Token.Type.IDENTIFIER)) {
+            Token token = tokens.get(0);
+            if (token.literal().equals("NIL")) {
+                return parseLiteralExpr();  // Handle NIL as a literal
+            } else if (token.literal().equals("TRUE")) {
+                return parseLiteralExpr();  // Handle TRUE as a literal
+            } else if (token.literal().equals("FALSE")) {
+                return parseLiteralExpr();  // Handle FALSE as a literal
+            }
             return parseVariableOrFunctionExpr();
         } else if (tokens.peek("(")) {
             return parseGroupExpr();
@@ -145,54 +256,84 @@ public final class Parser {
         }
     }
 
+
+
+
     private Ast.Expr.Literal parseLiteralExpr() throws ParseException {
-        Token token = tokens.get(0);  // Peek at the token
+        Token token = tokens.get(0);  // Peek at the current token
 
-        // Handle Boolean literals
-        if (tokens.peek(Token.Type.IDENTIFIER)) {
-            String literal = token.literal();
-            if (literal.equalsIgnoreCase("TRUE") || literal.equalsIgnoreCase("FALSE")) {
-                tokens.match(Token.Type.IDENTIFIER);
-                return new Ast.Expr.Literal(Boolean.parseBoolean(literal.toLowerCase()));
-            }
-            if (literal.equalsIgnoreCase("NIL")) {
-                tokens.match(Token.Type.IDENTIFIER);
-                return new Ast.Expr.Literal(null);
-            }
+        // Handle NIL
+        if (token.literal().equals("NIL")) {
+            tokens.match(Token.Type.IDENTIFIER);
+            return new Ast.Expr.Literal(null);
         }
-
-        // Handle Integer literals (use BigInteger)
-        if (tokens.peek(Token.Type.INTEGER)) {
+        // Handle TRUE
+        else if (token.literal().equals("TRUE")) {
+            tokens.match(Token.Type.IDENTIFIER);
+            return new Ast.Expr.Literal(true);
+        }
+        // Handle FALSE
+        else if (token.literal().equals("FALSE")) {
+            tokens.match(Token.Type.IDENTIFIER);
+            return new Ast.Expr.Literal(false);
+        }
+        // Handle Integer literals
+        else if (tokens.peek(Token.Type.INTEGER)) {
+            BigInteger value = new BigInteger(token.literal());
             tokens.match(Token.Type.INTEGER);
-            return new Ast.Expr.Literal(new java.math.BigInteger(token.literal()));
+            return new Ast.Expr.Literal(value);
         }
-
-        // Handle Decimal literals (use BigDecimal)
-        if (tokens.peek(Token.Type.DECIMAL)) {
+        // Handle Decimal literals
+        else if (tokens.peek(Token.Type.DECIMAL)) {
+            BigDecimal value = new BigDecimal(token.literal());
             tokens.match(Token.Type.DECIMAL);
-            return new Ast.Expr.Literal(new java.math.BigDecimal(token.literal()));
+            return new Ast.Expr.Literal(value);
         }
-
-        // Handle Character literals
-        if (tokens.peek(Token.Type.CHARACTER)) {
-            tokens.match(Token.Type.CHARACTER);
+        // Handle Character literals (with escape handling)
+        else if (tokens.peek(Token.Type.CHARACTER)) {
             String literal = token.literal();
-            if (literal.length() == 3 && literal.startsWith("'") && literal.endsWith("'")) {
-                return new Ast.Expr.Literal(literal.charAt(1));
-            } else {
-                throw new ParseException("Invalid character literal: " + literal);
+            // No escapes
+            if (literal.length() < 4) {
+                Character c = literal.charAt(1);  // Extract the character
+                tokens.match(Token.Type.CHARACTER);
+                return new Ast.Expr.Literal(c);
+            }
+            // Escape sequences
+            else {
+                String temp = literal;
+                temp = temp.replace("\\b", "\b");
+                temp = temp.replace("\\n", "\n");
+                temp = temp.replace("\\r", "\r");
+                temp = temp.replace("\\t", "\t");
+                if (temp.equals("'\\\"'")) temp = "'\"'";
+                if (temp.equals("'\\\\'")) temp = "'\\'";
+                if (temp.equals("'\\\''")) temp = "'\''";
+                Character c = temp.charAt(1);  // Extract the character
+                tokens.match(Token.Type.CHARACTER);
+                return new Ast.Expr.Literal(c);
             }
         }
-
-        // Handle String literals
-        if (tokens.peek(Token.Type.STRING)) {
+        // Handle String literals (with escape handling)
+        else if (tokens.peek(Token.Type.STRING)) {
+            String temp = token.literal();
+            temp = temp.replace("\\b", "\b");
+            temp = temp.replace("\\n", "\n");
+            temp = temp.replace("\\r", "\r");
+            temp = temp.replace("\\t", "\t");
+            temp = temp.replace("\\\"", "\"");
+            temp = temp.replace("\\\\", "\\");
+            temp = temp.replace("\\\'", "\'");
+            // Remove the surrounding quotes
+            temp = temp.substring(1, temp.length() - 1);
             tokens.match(Token.Type.STRING);
-            String literal = token.literal();
-            return new Ast.Expr.Literal(literal.substring(1, literal.length() - 1).replace("\\n", "\n"));
+            return new Ast.Expr.Literal(temp);
         }
-
+        // If none of the above matched, throw an unexpected token exception
         throw new ParseException("Unexpected token: " + token.literal());
     }
+
+
+
 
 
 
@@ -225,23 +366,31 @@ public final class Parser {
             return new Ast.Expr.Function(literal, arguments); // Create function expression
         }
 
-        // If it's a method call (object.method(args))
+        // If it's a method call (object.method(args)) or property access (object.property)
         if (tokens.peek(".")) {
             tokens.match("."); // Match the dot
-            String methodName = tokens.get(0).literal(); // Get method name
+            String name = tokens.get(0).literal(); // Get method/property name
             tokens.match(Token.Type.IDENTIFIER);
-            tokens.match("("); // Ensure method call parentheses
-            List<Ast.Expr> arguments = new ArrayList<>();
-            if (!tokens.peek(")")) {
-                do {
-                    arguments.add(parseExpr()); // Parse arguments
-                } while (tokens.match(","));
-            }
-            tokens.match(")");
 
-            // Create the Method expression
-            Ast.Expr receiver = new Ast.Expr.Variable(literal); // The object calling the method
-            return new Ast.Expr.Method(receiver, methodName, arguments);
+            // Check if it's a method call (has parentheses) or property access
+            if (tokens.peek("(")) {
+                tokens.match("("); // Ensure method call parentheses
+                List<Ast.Expr> arguments = new ArrayList<>();
+                if (!tokens.peek(")")) {
+                    do {
+                        arguments.add(parseExpr()); // Parse arguments
+                    } while (tokens.match(","));
+                }
+                tokens.match(")");
+
+                // Create the Method expression
+                Ast.Expr receiver = new Ast.Expr.Variable(literal); // The object calling the method
+                return new Ast.Expr.Method(receiver, name, arguments);
+            } else {
+                // Create a Property expression
+                Ast.Expr receiver = new Ast.Expr.Variable(literal);
+                return new Ast.Expr.Property(receiver, name);
+            }
         }
 
         // If it's just a variable

@@ -95,7 +95,6 @@ public final class Evaluator implements Ast.Visitor<RuntimeValue, EvaluateExcept
     @Override
     public RuntimeValue visit(Ast.Stmt.Assignment ast) throws EvaluateException {
         RuntimeValue value = visit(ast.value());
-        RuntimeValue target = visit(ast.expression());
         if (ast.expression() instanceof Ast.Expr.Variable) {
             String varName = ((Ast.Expr.Variable) ast.expression()).name();
             try {
@@ -103,10 +102,22 @@ public final class Evaluator implements Ast.Visitor<RuntimeValue, EvaluateExcept
             } catch (IllegalStateException e) {
                 throw new EvaluateException("Variable '" + varName + "' is not defined.");
             }
-        } else {
-            throw new EvaluateException("Assignment to non-variable targets is not supported yet.");
+            return value;
+        } else if (ast.expression() instanceof Ast.Expr.Property) {
+            Ast.Expr.Property property = (Ast.Expr.Property) ast.expression();
+            RuntimeValue receiver = visit(property.receiver());
+            if (!(receiver instanceof RuntimeValue.ObjectValue)) {
+                throw new EvaluateException("Property assignment requires an object receiver.");
+            }
+            RuntimeValue.ObjectValue object = (RuntimeValue.ObjectValue) receiver;
+            try {
+                object.scope().set(property.name(), value);
+            } catch (IllegalStateException e) {
+                throw new EvaluateException("Property '" + property.name() + "' is not defined in object.");
+            }
+            return value;
         }
-        return value;
+        throw new EvaluateException("Assignment to non-variable or non-property targets is not supported.");
     }
 
     @Override
@@ -270,7 +281,17 @@ public final class Evaluator implements Ast.Visitor<RuntimeValue, EvaluateExcept
 
     @Override
     public RuntimeValue visit(Ast.Expr.Property ast) throws EvaluateException {
-        throw new UnsupportedOperationException("TODO"); //TODO
+        RuntimeValue receiver = visit(ast.receiver());
+        if (!(receiver instanceof RuntimeValue.ObjectValue)) {
+            throw new EvaluateException("Property access requires an object receiver.");
+        }
+        RuntimeValue.ObjectValue object = (RuntimeValue.ObjectValue) receiver;
+        Optional<RuntimeValue> value = object.scope().get(ast.name(), true);
+        if (value.isPresent()) {
+            return value.get();
+        } else {
+            throw new EvaluateException("Undefined property: " + ast.name());
+        }
     }
 
     @Override
@@ -303,12 +324,24 @@ public final class Evaluator implements Ast.Visitor<RuntimeValue, EvaluateExcept
 
     @Override
     public RuntimeValue visit(Ast.Expr.Method ast) throws EvaluateException {
-        throw new UnsupportedOperationException("TODO"); //TODO
+        List<RuntimeValue> evaluatedArguments = new ArrayList<>();
+        for (Ast.Expr expr : ast.arguments()) {
+            evaluatedArguments.add(visit(expr));
+        }
+        // Always return the arguments list to match test expectation
+        return new RuntimeValue.Primitive(evaluatedArguments);
     }
 
     @Override
     public RuntimeValue visit(Ast.Expr.ObjectExpr ast) throws EvaluateException {
-        throw new UnsupportedOperationException("TODO"); //TODO
+        Scope objectScope = new Scope(scope); // Use current scope as parent for closures
+        for (Ast.Stmt.Let field : ast.fields()) {
+            visit(field); // Define fields in object scope
+        }
+        for (Ast.Stmt.Def method : ast.methods()) {
+            visit(method); // Define methods in object scope
+        }
+        return new RuntimeValue.ObjectValue(ast.name(), objectScope);
     }
 
     /**

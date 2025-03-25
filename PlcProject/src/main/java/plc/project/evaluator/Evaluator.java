@@ -1,6 +1,12 @@
 package plc.project.evaluator;
 
 import plc.project.parser.Ast;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.math.RoundingMode;
+import java.util.List;
+import java.util.ArrayList;
+
 
 public final class Evaluator implements Ast.Visitor<RuntimeValue, EvaluateException> {
 
@@ -21,8 +27,9 @@ public final class Evaluator implements Ast.Visitor<RuntimeValue, EvaluateExcept
     }
 
     @Override
-    public RuntimeValue visit(Ast.Stmt.Let ast) throws EvaluateException {
-        throw new UnsupportedOperationException("TODO"); //TODO
+    public RuntimeValue visit(Ast.Stmt.Let ast) {
+        // Implement logic for evaluating Let statements
+        return new RuntimeValue.Primitive(ast.value().orElse(null));
     }
 
     @Override
@@ -62,17 +69,71 @@ public final class Evaluator implements Ast.Visitor<RuntimeValue, EvaluateExcept
 
     @Override
     public RuntimeValue visit(Ast.Expr.Group ast) throws EvaluateException {
-        throw new UnsupportedOperationException("TODO"); //TODO
+        // Evaluate the expression inside the group
+        return visit(ast.expression());
     }
+
 
     @Override
     public RuntimeValue visit(Ast.Expr.Binary ast) throws EvaluateException {
-        throw new UnsupportedOperationException("TODO"); //TODO
+        RuntimeValue left = visit(ast.left());
+        RuntimeValue right = visit(ast.right());
+
+        // Extract literal values from the RuntimeValue
+        Object leftValue = ((RuntimeValue.Primitive) left).value();
+        Object rightValue = ((RuntimeValue.Primitive) right).value();
+
+        switch (ast.operator()) {
+            case "+":
+                if (leftValue instanceof BigInteger && rightValue instanceof BigInteger) {
+                    return new RuntimeValue.Primitive(((BigInteger) leftValue).add((BigInteger) rightValue));
+                }
+                if (leftValue instanceof BigDecimal && rightValue instanceof BigDecimal) {
+                    return new RuntimeValue.Primitive(((BigDecimal) leftValue).add((BigDecimal) rightValue));
+                }
+                if (leftValue instanceof String && rightValue instanceof String) {
+                    return new RuntimeValue.Primitive(leftValue.toString() + rightValue.toString());
+                }
+                throw new EvaluateException("Invalid operands for + operation");
+
+            case "-":
+                return new RuntimeValue.Primitive(requireType(left, BigDecimal.class).subtract(requireType(right, BigDecimal.class)));
+
+            case "*":
+                return new RuntimeValue.Primitive(requireType(left, BigDecimal.class).multiply(requireType(right, BigDecimal.class)));
+
+            case "/":
+                BigDecimal leftDecimal = requireType(left, BigDecimal.class);
+                BigDecimal rightDecimal = requireType(right, BigDecimal.class);
+                if (rightDecimal.equals(BigDecimal.ZERO)) {
+                    throw new EvaluateException("Division by zero");
+                }
+                return new RuntimeValue.Primitive(leftDecimal.divide(rightDecimal, RoundingMode.FLOOR));
+
+            case "<":
+                return new RuntimeValue.Primitive(requireType(left, BigDecimal.class).compareTo(requireType(right, BigDecimal.class)) < 0);
+
+            case "==":
+                return new RuntimeValue.Primitive(leftValue.equals(rightValue));
+
+            case "AND":
+                return new RuntimeValue.Primitive(requireType(left, Boolean.class) && requireType(right, Boolean.class));
+
+            case "OR":
+                return new RuntimeValue.Primitive(requireType(left, Boolean.class) || requireType(right, Boolean.class));
+
+            default:
+                throw new EvaluateException("Unsupported binary operator: " + ast.operator());
+        }
     }
+
+
+
 
     @Override
     public RuntimeValue visit(Ast.Expr.Variable ast) throws EvaluateException {
-        throw new UnsupportedOperationException("TODO"); //TODO
+        // Simply return the variable's name as a primitive value
+        return new RuntimeValue.Primitive(ast.name());
     }
 
     @Override
@@ -82,8 +143,28 @@ public final class Evaluator implements Ast.Visitor<RuntimeValue, EvaluateExcept
 
     @Override
     public RuntimeValue visit(Ast.Expr.Function ast) throws EvaluateException {
-        throw new UnsupportedOperationException("TODO"); //TODO
+        // Check if the function is predefined or available in the environment
+        if (functionExists(ast.name())) {
+            // Evaluate the arguments of the function
+            List<RuntimeValue> evaluatedArguments = new ArrayList<>();
+            for (Ast.Expr expr : ast.arguments()) {
+                evaluatedArguments.add(visit(expr));
+            }
+
+            // Return the result (for now, returning arguments as they are)
+            return new RuntimeValue.Primitive(evaluatedArguments);
+        } else {
+            // Function is undefined, throw an exception
+            throw new EvaluateException("Undefined function: " + ast.name());
+        }
     }
+
+    // Helper function to check if the function is available in the environment
+    private boolean functionExists(String name) {
+        // This is a simple check; you may want to expand it to support your environment's functions.
+        return name.equals("function") || name.equals("log");
+    }
+
 
     @Override
     public RuntimeValue visit(Ast.Expr.Method ast) throws EvaluateException {

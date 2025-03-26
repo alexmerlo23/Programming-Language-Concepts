@@ -107,8 +107,41 @@ public final class Evaluator implements Ast.Visitor<RuntimeValue, EvaluateExcept
 
     @Override
     public RuntimeValue visit(Ast.Stmt.For ast) throws EvaluateException {
-        throw new UnsupportedOperationException("TODO"); //TODO
+        // Evaluate the expression (e.g., list(1, 2, 3))
+        RuntimeValue expressionValue = visit(ast.expression());
+
+        // Ensure the result is a Primitive wrapping a List
+        if (!(expressionValue instanceof RuntimeValue.Primitive) ||
+                !(((RuntimeValue.Primitive) expressionValue).value() instanceof List)) {
+            throw new EvaluateException("For statement requires an iterable list.");
+        }
+
+        @SuppressWarnings("unchecked")
+        List<RuntimeValue> iterableList = (List<RuntimeValue>) ((RuntimeValue.Primitive) expressionValue).value();
+
+        // Iterate over the list
+        for (RuntimeValue element : iterableList) {
+            // Create a new scope for each iteration
+            Scope iterationScope = new Scope(scope);
+            Scope originalScope = this.scope;
+            this.scope = iterationScope;
+
+            // Define the loop variable in the new scope using ast.name()
+            iterationScope.define(ast.name(), element);
+
+            // Execute the body statements for side effects only
+            for (Ast.Stmt stmt : ast.body()) {
+                visit(stmt); // Evaluate but don’t update result
+            }
+
+            // Restore the original scope after iteration
+            this.scope = originalScope;
+        }
+
+        // Always return null
+        return new RuntimeValue.Primitive(null);
     }
+
 
     @Override
     public RuntimeValue visit(Ast.Stmt.Return ast) throws EvaluateException {

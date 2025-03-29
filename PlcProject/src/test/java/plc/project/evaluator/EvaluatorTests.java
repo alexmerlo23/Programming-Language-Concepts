@@ -155,6 +155,250 @@ final class EvaluatorTests {
 
     @ParameterizedTest
     @MethodSource
+    void testFailedCases(String test, Input input, RuntimeValue expected, List<RuntimeValue> log) {
+        test(input, expected, log, Parser::parseSource);
+    }
+
+    private static Stream<Arguments> testFailedCases() {
+        return Stream.of(
+                // Binary Expr: Op- Evaluation Order Left Validation Error
+                Arguments.of("Op- Evaluation Order Left",
+                        new Input.Ast(new Ast.Source(List.of(
+                                new Ast.Stmt.Expression(new Ast.Expr.Binary("-",
+                                        new Ast.Expr.Function("log", List.of(new Ast.Expr.Literal("evaluated"))),
+                                        new Ast.Expr.Variable("undefined")
+                                ))
+                        ))),
+                        null, // Expect exception
+                        List.of(new RuntimeValue.Primitive("evaluated"))
+                ),
+
+                // Method Expr: Method
+                Arguments.of("Method Expr Method",
+                        new Input.Ast(new Ast.Source(List.of(
+                                new Ast.Stmt.Expression(new Ast.Expr.Method(
+                                        new Ast.Expr.Variable("object"),
+                                        "method",
+                                        List.of(new Ast.Expr.Literal("argument"))
+                                ))
+                        ))),
+                        new RuntimeValue.Primitive(List.of(new RuntimeValue.Primitive("argument"))),
+                        List.of()
+                ),
+
+                // Let Stmt: Value Scope Undefined
+                Arguments.of("Let Value Scope Undefined",
+                        new Input.Ast(new Ast.Source(List.of(
+                                new Ast.Stmt.Let("x", Optional.of(new Ast.Expr.Variable("undefined"))),
+                                new Ast.Stmt.Expression(new Ast.Expr.Function("log", List.of(new Ast.Expr.Variable("x"))))
+                        ))),
+                        null, // Expect exception or null if fixed
+                        List.of()
+                ),
+
+                // Def Stmt: Static Scoping
+                Arguments.of("Def Static Scoping",
+                        new Input.Ast(new Ast.Source(List.of(
+                                new Ast.Stmt.Let("x", Optional.of(new Ast.Expr.Literal("outer"))),
+                                new Ast.Stmt.Def("f", List.of(), List.of(
+                                        new Ast.Stmt.Let("x", Optional.of(new Ast.Expr.Literal("inner")))
+                                )),
+                                new Ast.Stmt.Expression(new Ast.Expr.Function("log", List.of(new Ast.Expr.Variable("x"))))
+                        ))),
+                        new RuntimeValue.Primitive(null),
+                        List.of(new RuntimeValue.Primitive("outer"))
+                ),
+
+                // If Stmt: Then Scope Exit Restored
+                Arguments.of("If Then Scope Exit Restored",
+                        new Input.Ast(new Ast.Source(List.of(
+                                new Ast.Stmt.Let("x", Optional.of(new Ast.Expr.Literal("outer"))),
+                                new Ast.Stmt.If(
+                                        new Ast.Expr.Literal(true),
+                                        List.of(new Ast.Stmt.Let("x", Optional.of(new Ast.Expr.Literal("inner")))),
+                                        List.of()
+                                ),
+                                new Ast.Stmt.Expression(new Ast.Expr.Function("log", List.of(new Ast.Expr.Variable("x"))))
+                        ))),
+                        new RuntimeValue.Primitive(null),
+                        List.of(new RuntimeValue.Primitive("outer"))
+                ),
+
+                // For Stmt: Range Function
+                Arguments.of("For Range Function",
+                        new Input.Ast(new Ast.Source(List.of(
+                                new Ast.Stmt.For("i",
+                                        new Ast.Expr.Function("range", List.of(
+                                                new Ast.Expr.Literal(BigInteger.ONE),
+                                                new Ast.Expr.Literal(BigInteger.valueOf(4))
+                                        )),
+                                        List.of(new Ast.Stmt.Expression(new Ast.Expr.Function("log", List.of(new Ast.Expr.Variable("i")))))
+                                )
+                        ))),
+                        new RuntimeValue.Primitive(null),
+                        List.of(
+                                new RuntimeValue.Primitive(BigInteger.ONE),
+                                new RuntimeValue.Primitive(BigInteger.TWO),
+                                new RuntimeValue.Primitive(BigInteger.valueOf(3))
+                        )
+                ),
+
+                // Assignment Stmt: Variable Undefined Log
+                Arguments.of("Assignment Variable Undefined Log",
+                        new Input.Ast(new Ast.Source(List.of(
+                                new Ast.Stmt.Assignment(
+                                        new Ast.Expr.Variable("x"),
+                                        new Ast.Expr.Function("log", List.of(new Ast.Expr.Literal("unevaluated")))
+                                )
+                        ))),
+                        null, // Expect exception
+                        List.of()
+                ),
+
+                // Assignment Stmt: Property Undefined
+                Arguments.of("Assignment Property Undefined",
+                        new Input.Ast(new Ast.Source(List.of(
+                                new Ast.Stmt.Assignment(
+                                        new Ast.Expr.Property(new Ast.Expr.Variable("object"), "undefined"),
+                                        new Ast.Expr.Function("log", List.of(new Ast.Expr.Literal("unevaluated")))
+                                )
+                        ))),
+                        null, // Expect exception
+                        List.of()
+                ),
+
+                // Binary Expr: Op+ String Concatenation String Right
+                Arguments.of("Op+ String Concatenation String Right",
+                        new Input.Ast(new Ast.Source(List.of(
+                                new Ast.Stmt.Expression(new Ast.Expr.Binary("+",
+                                        new Ast.Expr.Literal(BigInteger.ONE),
+                                        new Ast.Expr.Literal("string")
+                                ))
+                        ))),
+                        new RuntimeValue.Primitive("1string"),
+                        List.of()
+                ),
+
+                // Binary Expr: Op+ String Concatenation NIL
+                Arguments.of("Op+ String Concatenation NIL",
+                        new Input.Ast(new Ast.Source(List.of(
+                                new Ast.Stmt.Expression(new Ast.Expr.Binary("+",
+                                        new Ast.Expr.Literal(null),
+                                        new Ast.Expr.Literal("string")
+                                ))
+                        ))),
+                        new RuntimeValue.Primitive("NILstring"),
+                        List.of()
+                ),
+
+                // Binary Expr: Op/ Decimal Rounding Up
+                Arguments.of("Op/ Decimal Rounding Up",
+                        new Input.Ast(new Ast.Source(List.of(
+                                new Ast.Stmt.Expression(new Ast.Expr.Binary("/",
+                                        new Ast.Expr.Literal(BigInteger.valueOf(12)),
+                                        new Ast.Expr.Literal(BigInteger.TEN)
+                                ))
+                        ))),
+                        new RuntimeValue.Primitive(new BigDecimal("1.2")),
+                        List.of()
+                ),
+
+                // Binary Expr: Op/ Mismatched Types
+                Arguments.of("Op/ Mismatched Types",
+                        new Input.Ast(new Ast.Source(List.of(
+                                new Ast.Stmt.Expression(new Ast.Expr.Binary("/",
+                                        new Ast.Expr.Literal(BigInteger.ONE),
+                                        new Ast.Expr.Literal("string")
+                                ))
+                        ))),
+                        null, // Expect exception
+                        List.of()
+                ),
+
+                // Function Expr: Argument Evaluation Order
+                Arguments.of("Function Argument Evaluation Order",
+                        new Input.Ast(new Ast.Source(List.of(
+                                new Ast.Stmt.Expression(new Ast.Expr.Function("undefined", List.of(
+                                        new Ast.Expr.Function("log", List.of(new Ast.Expr.Literal("evaluated"))),
+                                        new Ast.Expr.Function("log", List.of(new Ast.Expr.Literal("unevaluated")))
+                                )))
+                        ))),
+                        null, // Expect exception
+                        List.of(new RuntimeValue.Primitive("evaluated"))
+                ),
+
+                // Method Expr: Undefined Evaluation Order
+                Arguments.of("Method Undefined Evaluation Order",
+                        new Input.Ast(new Ast.Source(List.of(
+                                new Ast.Stmt.Expression(new Ast.Expr.Method(
+                                        new Ast.Expr.Variable("undefined"),
+                                        "method",
+                                        List.of(new Ast.Expr.Function("log", List.of(new Ast.Expr.Literal("unevaluated")))
+                                        )))
+                        ))),
+                        null, // Expect exception
+                        List.of()
+                ),
+
+                // Method Expr: Argument Evaluation Order
+                Arguments.of("Method Argument Evaluation Order",
+                        new Input.Ast(new Ast.Source(List.of(
+                                new Ast.Stmt.Expression(new Ast.Expr.Method(
+                                        new Ast.Expr.Variable("object"),
+                                        "method",
+                                        List.of(
+                                                new Ast.Expr.Literal(BigInteger.TWO),
+                                                new Ast.Expr.Literal(BigInteger.valueOf(3))
+                                        )
+                                ))
+                        ))),
+                        new RuntimeValue.Primitive(List.of(
+                                new RuntimeValue.Primitive(BigInteger.TWO),
+                                new RuntimeValue.Primitive(BigInteger.valueOf(3))
+                        )),
+                        List.of()
+                ),
+
+                // Object Expr: Method Receiver (this)
+                Arguments.of("Object Method Receiver This",
+                        new Input.Ast(new Ast.Source(List.of(
+                                new Ast.Stmt.Expression(new Ast.Expr.ObjectExpr(
+                                        Optional.of("o"),
+                                        List.of(),
+                                        List.of(
+                                                new Ast.Stmt.Def("m", List.of(), List.of(
+                                                        new Ast.Stmt.Expression(new Ast.Expr.Function("log", List.of(new Ast.Expr.Variable("this"))))
+                                                ))
+                                        )
+                                )),
+                                new Ast.Stmt.Expression(new Ast.Expr.Method(
+                                        new Ast.Expr.Variable("o"),
+                                        "m",
+                                        List.of()
+                                ))
+                        ))),
+                        new RuntimeValue.Primitive(null),
+                        List.of(new RuntimeValue.ObjectValue(Optional.of("o"), new Scope(null)))
+                ),
+
+                // Program: Fizzbuzz 5
+                Arguments.of("Program Fizzbuzz 5",
+                        new Input.Program("""
+                    DEF fizzbuzz(n) DO
+                        IF n == 5 DO
+                            "Buzz";
+                        END
+                    END
+                    fizzbuzz(5);
+                """),
+                        new RuntimeValue.Primitive("Buzz"),
+                        List.of()
+                )
+        );
+    }
+
+    @ParameterizedTest
+    @MethodSource
     void testIfStmt(String test, Input input, RuntimeValue expected, List<RuntimeValue> log) {
         test(input, expected, log, Parser::parseSource);
     }
@@ -649,6 +893,8 @@ final class EvaluatorTests {
         );
     }
 
+
+
     @ParameterizedTest
     @MethodSource
     void testProgram(String test, Input input, RuntimeValue expected, List<RuntimeValue> log) {
@@ -671,6 +917,8 @@ final class EvaluatorTests {
             )
         );
     }
+
+
 
     interface ParserMethod<T extends Ast> {
         T invoke(Parser parser) throws ParseException;

@@ -74,7 +74,7 @@ public final class Parser {
 
 
     private Ast.Stmt.Def parseDefStmt() throws ParseException {
-        tokens.match("def");
+        tokens.match("DEF"); // Match uppercase "DEF"
         String functionName = tokens.get(0).literal();
         tokens.match(Token.Type.IDENTIFIER);
         tokens.match("(");
@@ -86,12 +86,12 @@ public final class Parser {
             } while (tokens.match(","));
         }
         tokens.match(")");
-        tokens.match("{");
+        tokens.match("DO"); // Match "DO" instead of "{"
         List<Ast.Stmt> body = new ArrayList<>();
-        while (!tokens.peek("}")) {
+        while (!tokens.peek("END")) { // Continue until "END"
             body.add(parseStmt());
         }
-        tokens.match("}");
+        tokens.match("END"); // Match "END" instead of "}"
         return new Ast.Stmt.Def(functionName, parameters, body);
     }
 

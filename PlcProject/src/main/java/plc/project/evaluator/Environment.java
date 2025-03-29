@@ -2,6 +2,8 @@ package plc.project.evaluator;
 
 import java.util.List;
 import java.util.Optional;
+import java.math.BigInteger;
+import java.util.ArrayList;
 
 public final class Environment {
 
@@ -68,7 +70,32 @@ public final class Environment {
      * all integers in that range (inclusive, exclusive).
      */
     private static RuntimeValue range(List<RuntimeValue> arguments) throws EvaluateException {
-        throw new UnsupportedOperationException("TODO"); //TODO
+        if (arguments.size() != 2) {
+            throw new EvaluateException("Range function expects exactly 2 arguments.");
+        }
+
+        // Extract start and end values, ensuring they are integers
+        RuntimeValue startValue = arguments.get(0);
+        RuntimeValue endValue = arguments.get(1);
+
+        // Verify arguments are Primitive with Integer values
+        if (!(startValue instanceof RuntimeValue.Primitive) ||
+                !(endValue instanceof RuntimeValue.Primitive) ||
+                !(((RuntimeValue.Primitive) startValue).value() instanceof BigInteger) ||
+                !(((RuntimeValue.Primitive) endValue).value() instanceof BigInteger)) {
+            throw new EvaluateException("Range function requires two integer arguments.");
+        }
+
+        BigInteger start = (BigInteger) ((RuntimeValue.Primitive) startValue).value();
+        BigInteger end = (BigInteger) ((RuntimeValue.Primitive) endValue).value();
+
+        // Create a list of integers in the range
+        List<RuntimeValue> rangeList = new ArrayList<>();
+        for (BigInteger i = start; i.compareTo(end) < 0; i = i.add(BigInteger.ONE)) {
+            rangeList.add(new RuntimeValue.Primitive(i));
+        }
+
+        return new RuntimeValue.Primitive(rangeList);
     }
 
     /**

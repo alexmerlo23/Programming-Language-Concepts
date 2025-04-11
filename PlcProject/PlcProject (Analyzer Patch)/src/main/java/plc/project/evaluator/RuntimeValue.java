@@ -9,7 +9,7 @@ import java.util.stream.Collectors;
 public sealed interface RuntimeValue {
 
     record Primitive(
-            @Nullable Object value
+        @Nullable Object value
     ) implements RuntimeValue {
 
         @Override
@@ -21,8 +21,8 @@ public sealed interface RuntimeValue {
     }
 
     record Function(
-            String name,
-            Definition definition
+        String name,
+        Definition definition
     ) implements RuntimeValue {
 
         @FunctionalInterface
@@ -40,15 +40,15 @@ public sealed interface RuntimeValue {
 
     //Using "ObjectValue" to avoid confusion with Java's "Object"
     record ObjectValue(
-            Optional<String> name,
-            Scope scope
+        Optional<String> name,
+        Scope scope
     ) implements RuntimeValue {
 
         @Override
         public boolean equals(Object obj) {
             return obj instanceof ObjectValue object &&
-                    name.equals(object.name) &&
-                    scope.collect(true).equals(object.scope.collect(true));
+                name.equals(object.name) &&
+                scope.collect(true).equals(object.scope.collect(true));
         }
 
     }

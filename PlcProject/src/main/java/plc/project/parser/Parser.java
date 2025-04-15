@@ -55,64 +55,102 @@ public final class Parser {
 
     private Ast.Stmt.Let parseLetStmt() throws ParseException {
         tokens.match("LET");
-        String variable = tokens.get(0).literal(); // Access the identifier
+        String variable = tokens.get(0).literal();
         tokens.match(Token.Type.IDENTIFIER);
-        Optional<Ast.Expr> expression = Optional.empty(); // Default value for expression is empty
 
-        if (tokens.match("=")) {
-            expression = Optional.of(parseExpr()); // Only parse the expression if "=" is present
+        // Handle optional type annotation
+        Optional<String> type = Optional.empty();
+        if (tokens.match(":")) {
+            // If we see a colon, we MUST see an identifier after it
+            // If the next token is not an identifier, throw a ParseException
+            if (!tokens.peek(Token.Type.IDENTIFIER)) {
+                throw new ParseException("Expected type identifier after colon.");
+            }
+            type = Optional.of(tokens.get(0).literal());
+            tokens.match(Token.Type.IDENTIFIER);
         }
 
-        // Check if the semicolon is present, if not, throw a ParseException
+        Optional<Ast.Expr> expression = Optional.empty();
+        if (tokens.match("=")) {
+            expression = Optional.of(parseExpr());
+        }
+
         if (!tokens.match(";")) {
             throw new ParseException("Expected semicolon after LET statement.");
         }
 
-        return new Ast.Stmt.Let(variable, expression); // Return the Let statement with the optional expression
+        return new Ast.Stmt.Let(variable, type, expression);
     }
 
 
-
     private Ast.Stmt.Def parseDefStmt() throws ParseException {
-        tokens.match("DEF"); // Match uppercase "DEF"
+        tokens.match("DEF");
         String functionName = tokens.get(0).literal();
         tokens.match(Token.Type.IDENTIFIER);
         tokens.match("(");
+
         List<String> parameters = new ArrayList<>();
+        List<Optional<String>> parameterTypes = new ArrayList<>();
+
         if (!tokens.peek(")")) {
             do {
                 parameters.add(tokens.get(0).literal());
                 tokens.match(Token.Type.IDENTIFIER);
+
+                // Check for parameter type annotation
+                if (tokens.match(":")) {
+                    // Ensure a type identifier follows the colon
+                    if (!tokens.peek(Token.Type.IDENTIFIER)) {
+                        throw new ParseException("Expected type identifier after colon.");
+                    }
+                    parameterTypes.add(Optional.of(tokens.get(0).literal()));
+                    tokens.match(Token.Type.IDENTIFIER);
+                }
             } while (tokens.match(","));
         }
         tokens.match(")");
-        tokens.match("DO"); // Match "DO" instead of "{"
+
+        // Check for return type annotation
+        Optional<String> returnType = Optional.empty();
+        if (tokens.match(":")) {
+            // Ensure a type identifier follows the colon
+            if (!tokens.peek(Token.Type.IDENTIFIER)) {
+                throw new ParseException("Expected type identifier after colon.");
+            }
+            returnType = Optional.of(tokens.get(0).literal());
+            tokens.match(Token.Type.IDENTIFIER);
+        }
+
+        tokens.match("DO");
         List<Ast.Stmt> body = new ArrayList<>();
-        while (!tokens.peek("END")) { // Continue until "END"
+        while (!tokens.peek("END")) {
             body.add(parseStmt());
         }
-        tokens.match("END"); // Match "END" instead of "}"
-        return new Ast.Stmt.Def(functionName, parameters, body);
+        tokens.match("END");
+
+        // Always use the full constructor to ensure returnType is properly handled
+        return new Ast.Stmt.Def(functionName, parameters, parameterTypes, returnType, body);
     }
 
+
     private Ast.Stmt.If parseIfStmt() throws ParseException {
-        tokens.match("if");
+        tokens.match("IF");
         Ast.Expr condition = parseExpr();
-        tokens.match("{");
+        tokens.match("DO");
+
         List<Ast.Stmt> thenBody = new ArrayList<>();
-        while (!tokens.peek("}")) {
+        while (!tokens.peek("ELSE") && !tokens.peek("END")) {
             thenBody.add(parseStmt());
         }
-        tokens.match("}");
+
         List<Ast.Stmt> elseBody = new ArrayList<>();
-        if (tokens.peek("else")) {
-            tokens.match("else");
-            tokens.match("{");
-            while (!tokens.peek("}")) {
+        if (tokens.match("ELSE")) {
+            while (!tokens.peek("END")) {
                 elseBody.add(parseStmt());
             }
-            tokens.match("}");
         }
+
+        tokens.match("END");
         return new Ast.Stmt.If(condition, thenBody, elseBody);
     }
 
@@ -234,19 +272,21 @@ public final class Parser {
         if (tokens.peek(Token.Type.INTEGER)) {
             return parseLiteralExpr();
         } else if (tokens.peek(Token.Type.DECIMAL)) {
-            return parseLiteralExpr();  // Handle DECIMAL literals
+            return parseLiteralExpr();
         } else if (tokens.peek(Token.Type.STRING)) {
-            return parseLiteralExpr();  // Handle STRING literals
+            return parseLiteralExpr();
         } else if (tokens.peek(Token.Type.CHARACTER)) {
-            return parseLiteralExpr();  // Handle CHARACTER literals
+            return parseLiteralExpr();
         } else if (tokens.peek(Token.Type.IDENTIFIER)) {
             Token token = tokens.get(0);
             if (token.literal().equals("NIL")) {
-                return parseLiteralExpr();  // Handle NIL as a literal
+                return parseLiteralExpr();
             } else if (token.literal().equals("TRUE")) {
-                return parseLiteralExpr();  // Handle TRUE as a literal
+                return parseLiteralExpr();
             } else if (token.literal().equals("FALSE")) {
-                return parseLiteralExpr();  // Handle FALSE as a literal
+                return parseLiteralExpr();
+            } else if (token.literal().equals("OBJECT")) {
+                return parseObjectExpr();  // Handle OBJECT keyword
             }
             return parseVariableOrFunctionExpr();
         } else if (tokens.peek("(")) {
@@ -345,7 +385,33 @@ public final class Parser {
     }
 
     private Ast.Expr.ObjectExpr parseObjectExpr() throws ParseException {
-        throw new UnsupportedOperationException("TODO"); //TODO
+        tokens.match("OBJECT");
+
+        // Handle optional name
+        Optional<String> name = Optional.empty();
+        if (tokens.peek(Token.Type.IDENTIFIER) && !tokens.peek("DO")) {
+            name = Optional.of(tokens.get(0).literal());
+            tokens.match(Token.Type.IDENTIFIER);
+        }
+
+        tokens.match("DO");
+
+        List<Ast.Stmt.Let> fields = new ArrayList<>();
+        List<Ast.Stmt.Def> methods = new ArrayList<>();
+
+        // Parse fields and methods until END
+        while (!tokens.peek("END")) {
+            if (tokens.peek("LET")) {
+                fields.add((Ast.Stmt.Let) parseStmt());
+            } else if (tokens.peek("DEF")) {
+                methods.add((Ast.Stmt.Def) parseStmt());
+            } else {
+                throw new ParseException("Expected field or method declaration in object.");
+            }
+        }
+
+        tokens.match("END");
+        return new Ast.Expr.ObjectExpr(name, fields, methods);
     }
 
     private Ast.Expr parseVariableOrFunctionExpr() throws ParseException {
